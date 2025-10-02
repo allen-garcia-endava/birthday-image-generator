@@ -30,7 +30,7 @@ app.http('generateBirthdayImage', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous', // si vas a llamarla desde Power Automate sin HTTP premium, considera 'function'
   handler: async (request, context) => {
-    console.log(`Request: ${request.method} ${request.url}`);
+    console.log(`Request1: ${request.method} ${request.url}`);
 
     if(request.method !== 'POST'){
       return { status: 200, body: 'OK' };
