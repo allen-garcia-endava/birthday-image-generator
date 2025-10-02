@@ -140,7 +140,6 @@ app.http('generateBirthdayImage', {
     const stamp = dayjs().format('YYMMDDHHmmss');
     const outFilePath = path.join('/tmp', `birthday-week-${stamp}.png`);
 
-
     const { cumpleanerosCount } = await renderCumples({
       hoy,
       empleados,
@@ -150,23 +149,10 @@ app.http('generateBirthdayImage', {
       outFilePath
     });
 
-    // --- 5) Subir a Cloudinary (si está configurado) ---
-    /*let uploadedUrl = null;
-    if (cloudinary.config().cloud_name) {
-      const uploadResult = await cloudinary.uploader.upload(outFilePath, {
-        folder: 'cumples',
-        use_filename: true,
-        unique_filename: false,
-        overwrite: true,
-        resource_type: 'image'
-      });
-      uploadedUrl = uploadResult.secure_url;
-    }*/
-
-    // 5) Subir a Azure Blob Storage (si está configurado)
+    // 5) Subir a Azure Blob Storage
     const blobName = `birthday-week-${stamp}.png`;
     const { urlWithSas } = await uploadPngToBlobAndGetUrl(outFilePath, blobName);
-    // Usa esta URL para publicar en Teams:
+    // URL para publicar en Teams:
     const uploadedUrl = urlWithSas;
 
     // 6 subir a TEAMS
