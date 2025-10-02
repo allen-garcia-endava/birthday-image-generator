@@ -1,0 +1,23 @@
+{
+  "name": "birthday-image-azfunc",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.4.0",
+    "@napi-rs/canvas": "^0.1.58",
+    "cloudinary": "^2.7.0",
+    "csv-parser": "^3.0.0",
+    "dayjs": "^1.11.10",
+    "node-fetch": "^3.3.2"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas-linux-x64-gnu": "^0.1.80",
+    "@napi-rs/canvas-linux-x64-musl": "^0.1.80",
+    "@napi-rs/canvas-win32-x64-msvc": "^0.1.80"
+  },
+  "main": "src/{index.js,functions/*.js}"
+}
