@@ -138,7 +138,7 @@ app.http('generateBirthdayImage', {
 
     // --- 4) Render + guardar en /tmp ---
     const stamp = dayjs().format('YYMMDDHHmmss');
-    const outFilePath = path.join('/tmp', `cumples-semana-${stamp}.png`);
+    const outFilePath = path.join('/tmp', `birthday-week-${stamp}.png`);
 
 
     const { cumpleanerosCount } = await renderCumples({
