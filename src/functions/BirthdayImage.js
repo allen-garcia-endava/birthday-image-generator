@@ -1,4 +1,10 @@
 const { app } = require('@azure/functions');
+const {
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+  BlobSASPermissions,
+  generateBlobSASQueryParameters
+} = require('@azure/storage-blob');
 
 const fs = require('fs');
 const path = require('path');
@@ -32,67 +38,67 @@ app.http('generateBirthdayImage', {
   handler: async (request, context) => {
     console.log(`Request1: ${request.method} ${request.url}`);
 
-    if(request.method !== 'POST'){
+    if (request.method !== 'POST') {
       return { status: 200, body: 'OK' };
     }
 
     const ua = request.headers.get('user-agent') || '';
-  const ctype = (request.headers.get('content-type') || '').toLowerCase();
+    const ctype = (request.headers.get('content-type') || '').toLowerCase();
 
-  // Lee el body UNA sola vez
-  let rawBody = '';
-  try {
-    rawBody = await request.text();    // <-- se lee aquí y NO se vuelve a leer más abajo
-  } catch {}
+    // Lee el body UNA sola vez
+    let rawBody = '';
+    try {
+      rawBody = await request.text();    // <-- se lee aquí y NO se vuelve a leer más abajo
+    } catch { }
 
-  // Healthcheck / warm-up (no consumas el body aquí otra vez)
-  const isHealthCheck =
-    ua.includes('AlwaysOn') ||
-    ua.includes('Azure-Functions') ||
-    ua.includes('HealthCheck') ||
-    ua === '';
+    // Healthcheck / warm-up (no consumas el body aquí otra vez)
+    const isHealthCheck =
+      ua.includes('AlwaysOn') ||
+      ua.includes('Azure-Functions') ||
+      ua.includes('HealthCheck') ||
+      ua === '';
 
-  const hasQueryDayMonth = !!(request.query.get('day') && request.query.get('month'));
-  const hasBody = !!rawBody;
+    const hasQueryDayMonth = !!(request.query.get('day') && request.query.get('month'));
+    const hasBody = !!rawBody;
 
-  if (isHealthCheck && !hasQueryDayMonth && !hasBody) {
-    context.log('Health check / warm-up detected, returning 200 without processing');
-    return { status: 200, body: 'OK' };
-  }
+    if (isHealthCheck && !hasQueryDayMonth && !hasBody) {
+      context.log('Health check / warm-up detected, returning 200 without processing');
+      return { status: 200, body: 'OK' };
+    }
 
-  // --- 1) day/month desde query o body ---
-  let day = null, month = null;
-  const dayQuery = request.query.get('day');
-  const monthQuery = request.query.get('month');
+    // --- 1) day/month desde query o body ---
+    let day = null, month = null;
+    const dayQuery = request.query.get('day');
+    const monthQuery = request.query.get('month');
 
-  let photosBaseUrl = PHOTOS_BASE_URL;
+    let photosBaseUrl = PHOTOS_BASE_URL;
 
-  // Parseo del body usando la copia
-  let payload = null;
-  if (ctype.includes('application/json') && rawBody) {
-    try { payload = JSON.parse(rawBody); } catch {}
-  } else if (rawBody) {
-    // permite "12,9" o "12 9"
-    const m = rawBody.match(/(\d{1,2})\D+(\d{1,2})/);
-    if (m) payload = { day: m[1], month: m[2] };
-  }
+    // Parseo del body usando la copia
+    let payload = null;
+    if (ctype.includes('application/json') && rawBody) {
+      try { payload = JSON.parse(rawBody); } catch { }
+    } else if (rawBody) {
+      // permite "12,9" o "12 9"
+      const m = rawBody.match(/(\d{1,2})\D+(\d{1,2})/);
+      if (m) payload = { day: m[1], month: m[2] };
+    }
 
-  // query > body
-  if (dayQuery && monthQuery) {
-    day = parseInt(dayQuery, 10);
-    month = parseInt(monthQuery, 10);
-  } else if (payload?.day != null && payload?.month != null) {
-    day = parseInt(payload.day, 10);
-    month = parseInt(payload.month, 10);
-  }
+    // query > body
+    if (dayQuery && monthQuery) {
+      day = parseInt(dayQuery, 10);
+      month = parseInt(monthQuery, 10);
+    } else if (payload?.day != null && payload?.month != null) {
+      day = parseInt(payload.day, 10);
+      month = parseInt(payload.month, 10);
+    }
 
-  context.log("Day/Month from query:", { dayQuery, monthQuery }, "from body:", payload ? { day: payload.day, month: payload.month } : null);
+    context.log("Day/Month from query:", { dayQuery, monthQuery }, "from body:", payload ? { day: payload.day, month: payload.month } : null);
 
-  const hoy = (day && month)
-    ? dayjs(`${dayjs().year()}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`)
-    : dayjs();
+    const hoy = (day && month)
+      ? dayjs(`${dayjs().year()}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+      : dayjs();
 
-  console.log("Fecha: ", hoy.format('YYYY-MM-DD'), { day, month });
+    console.log("Fecha: ", hoy.format('YYYY-MM-DD'), { day, month });
 
     // --- 2) Origen del CSV: csvText | csvUrl | archivo local ---
     const baseDir = __dirname;
@@ -145,7 +151,7 @@ app.http('generateBirthdayImage', {
     });
 
     // --- 5) Subir a Cloudinary (si está configurado) ---
-    let uploadedUrl = null;
+    /*let uploadedUrl = null;
     if (cloudinary.config().cloud_name) {
       const uploadResult = await cloudinary.uploader.upload(outFilePath, {
         folder: 'cumples',
@@ -155,26 +161,33 @@ app.http('generateBirthdayImage', {
         resource_type: 'image'
       });
       uploadedUrl = uploadResult.secure_url;
-    }
+    }*/
+
+    // 5) Subir a Azure Blob Storage (si está configurado)
+    const blobName = `cumples-semana-${stamp}.png`;
+    const { urlWithSas } = await uploadPngToBlobAndGetUrl(outFilePath, blobName);
+    // Usa esta URL para publicar en Teams:
+    const uploadedUrl = urlWithSas;
 
     // 6 subir a TEAMS
     if (process.env.TEAMS_WEBHOOK_URL && uploadedUrl) {
       console.log("Enviando notificación a Teams...");
-    const payload = {
-    uploadedUrl,
-    cumpleaneros: cumpleanerosCount,
-    dateRange: {
-      start: hoy.format('YYYY-MM-DD'),
-      end: hoy.add(6,'day').format('YYYY-MM-DD')
+      const payload = {
+        uploadedUrl,
+        cumpleaneros: cumpleanerosCount,
+        dateRange: {
+          start: hoy.format('YYYY-MM-DD'),
+          end: hoy.add(6, 'day').format('YYYY-MM-DD')
+        }
+      };
+      await fetch(process.env.TEAMS_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }else{
+      console.log("No se envió notificación a Teams (no hay TEAMS_WEBHOOK_URL o no se subió la imagen)");
     }
-  };
-  await fetch(process.env.TEAMS_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-}
-
 
     return {
       status: 200,
@@ -188,6 +201,49 @@ app.http('generateBirthdayImage', {
     };
   }
 });
+
+async function uploadPngToBlobAndGetUrl(outFilePath, blobName) {
+  const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+  const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
+  const containerName = process.env.BIRTHDAY_CONTAINER;
+
+  // Credencial con Account Key (necesaria para firmar SAS)
+  const credential = new StorageSharedKeyCredential(accountName, accountKey);
+  const service = new BlobServiceClient(
+    `https://${accountName}.blob.core.windows.net`,
+    credential
+  );
+
+  const container = service.getContainerClient(containerName);
+  await container.createIfNotExists(); // idempotente
+
+  const blockBlob = container.getBlockBlobClient(blobName);
+
+  // Sube el archivo desde /tmp con content-type adecuado
+  await blockBlob.uploadFile(outFilePath, {
+    blobHTTPHeaders: {
+      blobContentType: 'image/png',
+      blobCacheControl: 'public, max-age=31536000' // opcional
+    }
+  });
+
+  // Genera SAS de solo lectura con expiración
+  const ttlHours = parseInt(process.env.BIRTHDAY_SAS_TTL_HOURS || '336', 10); // 14 días
+  const startsOn = new Date(Date.now() - 5 * 60 * 1000);     // 5 min atrás por relojes
+  const expiresOn = new Date(Date.now() + ttlHours * 3600 * 1000);
+
+  const sas = generateBlobSASQueryParameters({
+    containerName,
+    blobName,
+    permissions: BlobSASPermissions.parse('r'),
+    startsOn,
+    expiresOn
+  }, credential).toString();
+
+  const urlWithSas = `${blockBlob.url}?${sas}`;
+  return { url: blockBlob.url, urlWithSas };
+}
+
 
 // Helper para construir la URL de la foto
 function resolvePhotoSrc(photoName, { photosBaseUrl, fotosDir }) {
@@ -230,7 +286,7 @@ function readCsvFromString(text) {
 async function renderCumples({ hoy, empleados, assetsDir, fotosDir, photosBaseUrl, outFilePath }) {
   console.log('About to require canvas…');
   const { createCanvas, loadImage, GlobalFonts } = loadCanvasBinding();
-  
+
   console.log('Canvas functions:', { createCanvas, loadImage });
   const diasSemana = Array.from({ length: 7 }, (_, i) => hoy.add(i, 'day'));
 

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@azure/functions": "^4.4.0",
+    "@azure/storage-blob": "^12.17.0",
     "@napi-rs/canvas": "^0.1.58",
     "cloudinary": "^2.7.0",
     "csv-parser": "^3.0.0",
