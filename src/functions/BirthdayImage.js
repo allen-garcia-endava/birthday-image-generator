@@ -164,7 +164,7 @@ app.http('generateBirthdayImage', {
     }*/
 
     // 5) Subir a Azure Blob Storage (si está configurado)
-    const blobName = `cumples-semana-${stamp}.png`;
+    const blobName = `birthday-week-${stamp}.png`;
     const { urlWithSas } = await uploadPngToBlobAndGetUrl(outFilePath, blobName);
     // Usa esta URL para publicar en Teams:
     const uploadedUrl = urlWithSas;
